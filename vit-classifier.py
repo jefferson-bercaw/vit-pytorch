@@ -141,7 +141,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(cur_dir, "saved_models"), exist_ok=True)
 
     excelFilePath = os.path.join(cur_dir,'Fold_Split.xlsx')
-    imgRootPath = "C:/Users/jrb187/PycharmProjects/FITNet/subset_data/2D_Images"
+    imgRootPath = "/hpc/group/ldefratelab/jrb187/FITNet/subset_data/2D_Images"
 
     # Transforms to data
     train_transforms = transforms.Compose(
@@ -156,71 +156,64 @@ if __name__ == '__main__':
         ]
     )
 
-    for fold in range(n_folds):
+    # for fold in range(n_folds):
+    fold = int(os.environ['SLURM_ARRAY_TASK_ID'])
 
-        excel_sheet_name_train = 'train_fold' + str(fold)
-        excel_sheet_name_test = 'valid_fold' + str(fold)
+    excel_sheet_name_train = 'train_fold' + str(fold)
+    excel_sheet_name_test = 'valid_fold' + str(fold)
 
-        train_obj = getDataFromExcelFile(excelFilePath=excelFilePath, imgRootPath=imgRootPath, excelSheetName=excel_sheet_name_train)
-        test_obj = getDataFromExcelFile(excelFilePath=excelFilePath, imgRootPath=imgRootPath, excelSheetName=excel_sheet_name_test)
+    train_obj = getDataFromExcelFile(excelFilePath=excelFilePath, imgRootPath=imgRootPath, excelSheetName=excel_sheet_name_train)
+    test_obj = getDataFromExcelFile(excelFilePath=excelFilePath, imgRootPath=imgRootPath, excelSheetName=excel_sheet_name_test)
 
-        train_dataset = MRIDataset(train_obj, transform=train_transforms)
-        test_dataset = MRIDataset(test_obj, transform=val_transforms)
+    train_dataset = MRIDataset(train_obj, transform=train_transforms)
+    test_dataset = MRIDataset(test_obj, transform=val_transforms)
 
-        train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=False)
-        test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
 
-        model = ViT(image_size=224, channels =1, frames=24, image_patch_size=16, frame_patch_size=1, num_classes=2,
-                    dim=14*14*24, depth=6, heads=8, mlp_dim=2048, dropout=0.1, emb_dropout=0.1)
+    model = ViT(image_size=224, channels =1, frames=24, image_patch_size=16, frame_patch_size=1, num_classes=2,
+                dim=14*14*24, depth=6, heads=8, mlp_dim=2048, dropout=0.1, emb_dropout=0.1)
 
-        # Training
-        criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(model.parameters(), lr=lr)
-        scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
+    # Training
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
 
-        for epoch in range(epochs):
-            epoch_loss = 0
-            epoch_accuracy = 0
+    for epoch in range(epochs):
 
-            for data, label in train_loader:
+        epoch_loss = 0
+        epoch_accuracy = 0
 
-                # Add 1 (channel)
-                data = data.unsqueeze(1)
-                assert data.shape == (batch_size, 1, 24, 224, 224)
+        for data, label in train_loader:
 
+            # Add 1 (channel)
+            data = data.unsqueeze(1)
+            assert data.shape == (batch_size, 1, 24, 224, 224)
+            data = data.to(device)
+            label = label.to(device)
+            output = model(data)
+            loss = criterion(output, label)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            acc = (output.argmax(dim=1) == label).float().mean()
+            epoch_accuracy += acc / len(train_loader)
+            epoch_loss += loss / len(train_loader)
+            torch.cuda.empty_cache()
+
+        with torch.no_grad():
+            epoch_val_accuracy = 0
+            epoch_val_loss = 0
+            for data, label in test_loader:
                 data = data.to(device)
                 label = label.to(device)
-
-                output = model(data)
-                loss = criterion(output, label)
-
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-                acc = (output.argmax(dim=1) == label).float().mean()
-                epoch_accuracy += acc / len(train_loader)
-                epoch_loss += loss / len(train_loader)
-
-                torch.cuda.empty_cache()
-
-            with torch.no_grad():
-                epoch_val_accuracy = 0
-                epoch_val_loss = 0
-                for data, label in test_loader:
-                    data = data.to(device)
-                    label = label.to(device)
-
-                    val_output = model(data)
-                    val_loss = criterion(val_output, label)
-
-                    acc = (val_output.argmax(dim=1) == label).float().mean()
-                    epoch_val_accuracy += acc / len(test_loader)
-                    epoch_val_loss += val_loss / len(test_loader)
-
-            print(
-                f"Fold : {fold+1} - Epoch : {epoch + 1} - loss : {epoch_loss:.4f} - acc: {epoch_accuracy:.4f} - val_loss : {epoch_val_loss:.4f} - val_acc: {epoch_val_accuracy:.4f}\n"
-            )
-
-        torch.save(model.state_dict(), './saved_models/{}.pt'.format("fold" + str(fold+1)))
+                val_output = model(data)
+                val_loss = criterion(val_output, label)
+                acc = (val_output.argmax(dim=1) == label).float().mean()
+                epoch_val_accuracy += acc / len(test_loader)
+                epoch_val_loss += val_loss / len(test_loader)
+        print(
+            f"Fold : {fold+1} - Epoch : {epoch + 1} - loss : {epoch_loss:.4f} - acc: {epoch_accuracy:.4f} - val_loss : {epoch_val_loss:.4f} - val_acc: {epoch_val_accuracy:.4f}\n"
+        )
+    torch.save(model.state_dict(), './saved_models/{}.pt'.format("fold" + str(fold+1)))
 
