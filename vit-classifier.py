@@ -1,25 +1,16 @@
 from __future__ import print_function
 
-import glob
-from itertools import chain
 import os
 import random
-import zipfile
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from linformer import Linformer
 from PIL import Image
-# from sklearn.model_selection import train_test_split
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader, Dataset
-from torchvision import datasets, transforms
-from tqdm.notebook import tqdm
+from torchvision import transforms
 
 
 from readDataFromExcel import getDataFromExcelFile
@@ -133,7 +124,8 @@ if __name__ == '__main__':
 
     seed_everything(seed)
 
-    device = 'cpu'
+    torch.set_num_threads(4)
+    device = 'cuda'
 
     n_folds = 10
     cur_dir = os.getcwd()
