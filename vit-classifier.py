@@ -133,7 +133,8 @@ if __name__ == '__main__':
 
     seed_everything(seed)
 
-    device = 'cpu'
+    torch.set_num_threads(4)
+    device = 'cuda'
 
     n_folds = 10
     cur_dir = os.getcwd()
