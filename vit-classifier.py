@@ -6,7 +6,6 @@ import os
 import random
 import zipfile
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
@@ -20,10 +19,6 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from tqdm.notebook import tqdm
-
-
-from readDataFromExcel import getDataFromExcelFile
-from vit_pytorch.vit_3d import ViT
 
 
 def seed_everything(seed):
